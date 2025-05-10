@@ -54,7 +54,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 className="flex items-center"
               >
                 <span className="text-2xl font-bold bg-gradient-to-r from-primary-500 to-primary-700 bg-clip-text text-transparent">
-                  AI Interface
+                  IJ
                 </span>
               </motion.div>
               
