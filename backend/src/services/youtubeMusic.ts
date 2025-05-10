@@ -355,6 +355,7 @@ export class YouTubeMusicService {
       let nextPageToken: any
 
       while (true) {
+        try {
         const response = await axios.get(
           `${YOUTUBE_API_BASE}/playlistItems`,
           {
@@ -411,12 +412,15 @@ export class YouTubeMusicService {
         if (!nextPageToken) {
           break
         }
-      }
-
-      return songs
     } catch (error) {
       console.error('Error fetching playlist tracks:', error)
-      throw new Error('Failed to fetch playlist tracks')
     }
+
+  }
+    } catch (error) {
+      console.error('Error fetching playlist tracks:', error)
+    }
+    return songs
+
   }
 } 

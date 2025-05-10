@@ -270,54 +270,58 @@ class YouTubeMusicService {
         try {
             let nextPageToken;
             while (true) {
-                const response = await axios_1.default.get(`${YOUTUBE_API_BASE}/playlistItems`, {
-                    params: {
-                        part: 'snippet,contentDetails',
-                        playlistId,
-                        maxResults: 50,
-                        pageToken: nextPageToken,
-                        key: YOUTUBE_API_KEY
-                    },
-                    headers: {
-                        Authorization: `Bearer ${accessToken}`
-                    }
-                });
-                // Get video details for each playlist item to check embeddable status
-                const videoIds = response.data.items
-                    .filter((item) => item.snippet.resourceId.kind === 'youtube#video')
-                    .map((item) => item.snippet.resourceId.videoId)
-                    .filter(this.validateVideoId);
-                if (videoIds.length > 0) {
-                    const videoDetailsResponse = await axios_1.default.get(`${YOUTUBE_API_BASE}/videos`, {
+                try {
+                    const response = await axios_1.default.get(`${YOUTUBE_API_BASE}/playlistItems`, {
                         params: {
-                            part: 'snippet,contentDetails,status',
-                            id: videoIds.join(','),
+                            part: 'snippet,contentDetails',
+                            playlistId,
+                            maxResults: 50,
+                            pageToken: nextPageToken,
                             key: YOUTUBE_API_KEY
+                        },
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`
                         }
                     });
-                    const validVideos = videoDetailsResponse.data.items.filter((video) => video.status && video.status.embeddable);
-                    const items = validVideos.map((video) => ({
-                        title: video.snippet.title,
-                        artist: video.snippet.channelTitle,
-                        album: null,
-                        providerId: video.id,
-                        provider: 'youtube',
-                        duration: video.contentDetails?.duration || null,
-                        thumbnail: video.snippet.thumbnails?.default?.url || null
-                    }));
-                    songs.push(...items);
+                    // Get video details for each playlist item to check embeddable status
+                    const videoIds = response.data.items
+                        .filter((item) => item.snippet.resourceId.kind === 'youtube#video')
+                        .map((item) => item.snippet.resourceId.videoId)
+                        .filter(this.validateVideoId);
+                    if (videoIds.length > 0) {
+                        const videoDetailsResponse = await axios_1.default.get(`${YOUTUBE_API_BASE}/videos`, {
+                            params: {
+                                part: 'snippet,contentDetails,status',
+                                id: videoIds.join(','),
+                                key: YOUTUBE_API_KEY
+                            }
+                        });
+                        const validVideos = videoDetailsResponse.data.items.filter((video) => video.status && video.status.embeddable);
+                        const items = validVideos.map((video) => ({
+                            title: video.snippet.title,
+                            artist: video.snippet.channelTitle,
+                            album: null,
+                            providerId: video.id,
+                            provider: 'youtube',
+                            duration: video.contentDetails?.duration || null,
+                            thumbnail: video.snippet.thumbnails?.default?.url || null
+                        }));
+                        songs.push(...items);
+                    }
+                    nextPageToken = response.data.nextPageToken;
+                    if (!nextPageToken) {
+                        break;
+                    }
                 }
-                nextPageToken = response.data.nextPageToken;
-                if (!nextPageToken) {
-                    break;
+                catch (error) {
+                    console.error('Error fetching playlist tracks:', error);
                 }
             }
-            return songs;
         }
         catch (error) {
             console.error('Error fetching playlist tracks:', error);
-            throw new Error('Failed to fetch playlist tracks');
         }
+        return songs;
     }
 }
 exports.YouTubeMusicService = YouTubeMusicService;

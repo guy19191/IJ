@@ -1,12 +1,34 @@
 import { useState, useRef, useEffect } from 'react'
 import { useMusicStore } from '../stores/musicStore'
+import { useAuthStore } from '../stores/authStore'
 
-export default function MusicPlayer() {
+interface MusicPlayerProps {
+  eventId: string;
+  initialPlaylist: any[];
+  onPlaylistUpdate: () => void;
+}
+
+export default function MusicPlayer(_props: MusicPlayerProps) {
   const { currentTrack, isPlaying, togglePlay, setCurrentTime, currentTime, duration } = useMusicStore()
+  const { user } = useAuthStore()
   const audioRef = useRef<HTMLAudioElement>(null)
   const [volume, setVolume] = useState(1)
 
+  if (!user?.accessToken) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
+        <div className="max-w-7xl mx-auto text-center">
+          <p className="text-gray-600">Please connect your music provider to use the player</p>
+        </div>
+      </div>
+    )
+  }
+
   useEffect(() => {
+    if (!user?.accessToken) {
+      console.error('No access token found')
+      return
+    }
     if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.play()
@@ -14,7 +36,7 @@ export default function MusicPlayer() {
         audioRef.current.pause()
       }
     }
-  }, [isPlaying, currentTrack])
+  }, [isPlaying, currentTrack, user])
 
   const handleTimeUpdate = () => {
     if (audioRef.current) {
