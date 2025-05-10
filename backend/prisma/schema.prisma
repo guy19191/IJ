@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String
+  password      String
+  isSuperUser   Boolean   @default(false)
+  musicProvider String    // 'spotify', 'apple', 'youtube'
+  providerId    String?   // ID from the music provider
+  accessToken   String?
+  refreshToken  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  createdEvents    Event[]    @relation("CreatedEvents")
+  joinedEvents     Event[]    @relation("JoinedEvents")
+  listeningHistory Song[]     @relation("ListeningHistory")
+}
+
+model Event {
+  id          String    @id @default(uuid())
+  name        String
+  description String
+  theme       String
+  isPublic    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  creatorId   String
+  creator     User      @relation("CreatedEvents", fields: [creatorId], references: [id])
+  participants User[]   @relation("JoinedEvents")
+  playlist    Song[]    @relation("EventPlaylist")
+}
+
+model Song {
+  id          String    @id @default(uuid())
+  title       String
+  artist      String
+  album       String?
+  providerId  String    // ID from the music provider
+  provider    String    // 'spotify', 'apple', 'youtube'
+  createdAt   DateTime  @default(now())
+
+  // Relations
+  eventId     String?
+  event       Event?    @relation("EventPlaylist", fields: [eventId], references: [id])
+  userId      String?
+  user        User?     @relation("ListeningHistory", fields: [userId], references: [id])
+} 

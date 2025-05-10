@@ -1,0 +1,45 @@
+{
+  "name": "music-event-manager-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "npm run clean && npm run build:ts && npm run copy-files",
+    "build:ts": "tsc",
+    "build:watch": "tsc -w",
+    "clean": "rimraf dist",
+    "copy-files": "copyfiles -u 1 \"src/**/*.json\" \"src/**/*.prisma\" dist",
+    "start": "node dist/index.js",
+    "start:dev": "npm run build && npm run start",
+    "typecheck": "tsc --noEmit",
+    "cleanDB": "prisma migrate reset --force",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "openai": "^4.28.0",
+    "qrcode": "^1.5.4",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/axios": "^0.14.4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.18",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^20.17.46",
+    "@types/qrcode": "^1.5.5",
+    "copyfiles": "^2.4.1",
+    "prisma": "^5.10.0",
+    "rimraf": "^5.0.5",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "music-project",
+  "version": "1.0.0",
+  "description": "Music Event and Playlist Manager",
+  "scripts": {
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "build": "cd frontend && npm run build && cd ../backend && npm run build",
+    "start": "cd backend && npm start",
+    "dev": "concurrently \"cd frontend && npm run dev\" \"cd backend && npm run dev\"",
+    "build:start": "npm run build && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "prisma": "^6.7.0",
+    "terser": "^5.39.0"
+  }
+}
