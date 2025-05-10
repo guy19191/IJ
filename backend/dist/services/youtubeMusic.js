@@ -8,16 +8,41 @@ const axios_1 = __importDefault(require("axios"));
 const index_1 = require("../index");
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+function validateYouTubeConfig() {
+    const requiredVars = [
+        'YOUTUBE_CLIENT_ID',
+        'YOUTUBE_CLIENT_SECRET',
+        'YOUTUBE_REDIRECT_URI',
+        'YOUTUBE_API_KEY'
+    ];
+    const missingVars = requiredVars.filter(varName => !process.env[varName]);
+    if (missingVars.length > 0) {
+        throw new Error(`Missing required YouTube configuration: ${missingVars.join(', ')}`);
+    }
+}
 const getYouTubeMusicAuthUrl = () => {
     const clientId = process.env.YOUTUBE_CLIENT_ID;
     const redirectUri = process.env.YOUTUBE_REDIRECT_URI;
-    const scope = 'https://www.googleapis.com/auth/youtube.readonly';
+    const scope = [
+        'https://www.googleapis.com/auth/youtube.readonly',
+        'https://www.googleapis.com/auth/youtube',
+        'https://www.googleapis.com/auth/youtube.force-ssl',
+        'https://www.googleapis.com/auth/youtubepartner',
+        'https://www.googleapis.com/auth/youtubepartner-channel-audit',
+        'https://www.googleapis.com/auth/userinfo.profile',
+        'https://www.googleapis.com/auth/userinfo.email'
+    ];
     if (!clientId || !redirectUri) {
         throw new Error('Missing YouTube client ID or redirect URI');
     }
-    console.log('YouTube Auth URL Redirect URI:', redirectUri);
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${encodeURIComponent(scope)}`;
-    console.log('Full YouTube Auth URL:', authUrl);
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${clientId}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&response_type=code` +
+        `&scope=${scope.join(' ')}` +
+        `&access_type=offline` +
+        `&prompt=consent`;
+    console.log('YouTube Auth URL:', authUrl);
     return authUrl;
 };
 exports.getYouTubeMusicAuthUrl = getYouTubeMusicAuthUrl;
@@ -28,32 +53,65 @@ const getYouTubeMusicToken = async (code) => {
     if (!clientId || !clientSecret || !redirectUri) {
         throw new Error('Missing YouTube credentials');
     }
-    console.log('Token Exchange Redirect URI:', redirectUri);
-    const response = await axios_1.default.post('https://oauth2.googleapis.com/token', new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: redirectUri,
-    }), {
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-        },
-    });
-    return response.data;
+    try {
+        const response = await axios_1.default.post('https://oauth2.googleapis.com/token', new URLSearchParams({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: redirectUri,
+            client_id: clientId,
+            client_secret: clientSecret
+        }), {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+        });
+        return response.data;
+    }
+    catch (error) {
+        console.error('Token exchange error:', error.response?.data || error.message);
+        throw new Error(`Failed to exchange code for token: ${error.response?.data?.error_description || error.message}`);
+    }
 };
 exports.getYouTubeMusicToken = getYouTubeMusicToken;
 const getYouTubeMusicUser = async (accessToken) => {
-    const response = await axios_1.default.get('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', {
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-        },
-    });
-    const channel = response.data.items[0];
-    return {
-        id: channel.id,
-        email: channel.snippet.title,
-        name: channel.snippet.title,
-    };
+    try {
+        // First get user info
+        const userInfoResponse = await axios_1.default.get('https://www.googleapis.com/oauth2/v2/userinfo', {
+            headers: {
+                Authorization: `Bearer ${accessToken}`
+            }
+        });
+        // Then get channel info
+        const channelResponse = await axios_1.default.get('https://www.googleapis.com/youtube/v3/channels', {
+            params: {
+                part: 'snippet',
+                mine: true
+            },
+            headers: {
+                Authorization: `Bearer ${accessToken}`
+            }
+        });
+        if (!channelResponse.data.items || channelResponse.data.items.length === 0) {
+            throw new Error('No YouTube channel found');
+        }
+        const channel = channelResponse.data.items[0];
+        return {
+            id: channel.id,
+            email: userInfoResponse.data.email,
+            name: userInfoResponse.data.name || channel.snippet.title
+        };
+    }
+    catch (error) {
+        // Add detailed error logging
+        console.error('Error fetching YouTube user:', {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            headers: error.response?.headers,
+            message: error.message
+        });
+        throw new Error(`Failed to fetch YouTube user: ${error.response?.data?.error_description || error.message}`);
+    }
 };
 exports.getYouTubeMusicUser = getYouTubeMusicUser;
 class YouTubeMusicService {
@@ -62,9 +120,11 @@ class YouTubeMusicService {
             where: { id: userId }
         });
         if (!user?.refreshToken) {
+            console.error('No refresh token found for user:', userId);
             throw new Error('No refresh token found');
         }
         try {
+            console.log('Refreshing token for user:', userId);
             const response = await axios_1.default.post('https://oauth2.googleapis.com/token', new URLSearchParams({
                 client_id: process.env.YOUTUBE_CLIENT_ID || '',
                 client_secret: process.env.YOUTUBE_CLIENT_SECRET || '',
@@ -75,6 +135,7 @@ class YouTubeMusicService {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 }
             });
+            console.log('Token refresh successful');
             // Update user's access token
             await index_1.prisma.user.update({
                 where: { id: userId },
@@ -86,7 +147,12 @@ class YouTubeMusicService {
             return response.data.access_token;
         }
         catch (error) {
-            console.error('Error refreshing YouTube token:', error);
+            console.error('Error refreshing YouTube token:', {
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+                message: error.message
+            });
             throw new Error('Failed to refresh YouTube token');
         }
     }
@@ -270,58 +336,54 @@ class YouTubeMusicService {
         try {
             let nextPageToken;
             while (true) {
-                try {
-                    const response = await axios_1.default.get(`${YOUTUBE_API_BASE}/playlistItems`, {
+                const response = await axios_1.default.get(`${YOUTUBE_API_BASE}/playlistItems`, {
+                    params: {
+                        part: 'snippet,contentDetails',
+                        playlistId,
+                        maxResults: 50,
+                        pageToken: nextPageToken,
+                        key: YOUTUBE_API_KEY
+                    },
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`
+                    }
+                });
+                // Get video details for each playlist item to check embeddable status
+                const videoIds = response.data.items
+                    .filter((item) => item.snippet.resourceId.kind === 'youtube#video')
+                    .map((item) => item.snippet.resourceId.videoId)
+                    .filter(this.validateVideoId);
+                if (videoIds.length > 0) {
+                    const videoDetailsResponse = await axios_1.default.get(`${YOUTUBE_API_BASE}/videos`, {
                         params: {
-                            part: 'snippet,contentDetails',
-                            playlistId,
-                            maxResults: 50,
-                            pageToken: nextPageToken,
+                            part: 'snippet,contentDetails,status',
+                            id: videoIds.join(','),
                             key: YOUTUBE_API_KEY
-                        },
-                        headers: {
-                            Authorization: `Bearer ${accessToken}`
                         }
                     });
-                    // Get video details for each playlist item to check embeddable status
-                    const videoIds = response.data.items
-                        .filter((item) => item.snippet.resourceId.kind === 'youtube#video')
-                        .map((item) => item.snippet.resourceId.videoId)
-                        .filter(this.validateVideoId);
-                    if (videoIds.length > 0) {
-                        const videoDetailsResponse = await axios_1.default.get(`${YOUTUBE_API_BASE}/videos`, {
-                            params: {
-                                part: 'snippet,contentDetails,status',
-                                id: videoIds.join(','),
-                                key: YOUTUBE_API_KEY
-                            }
-                        });
-                        const validVideos = videoDetailsResponse.data.items.filter((video) => video.status && video.status.embeddable);
-                        const items = validVideos.map((video) => ({
-                            title: video.snippet.title,
-                            artist: video.snippet.channelTitle,
-                            album: null,
-                            providerId: video.id,
-                            provider: 'youtube',
-                            duration: video.contentDetails?.duration || null,
-                            thumbnail: video.snippet.thumbnails?.default?.url || null
-                        }));
-                        songs.push(...items);
-                    }
-                    nextPageToken = response.data.nextPageToken;
-                    if (!nextPageToken) {
-                        break;
-                    }
+                    const validVideos = videoDetailsResponse.data.items.filter((video) => video.status && video.status.embeddable);
+                    const items = validVideos.map((video) => ({
+                        title: video.snippet.title,
+                        artist: video.snippet.channelTitle,
+                        album: null,
+                        providerId: video.id,
+                        provider: 'youtube',
+                        duration: video.contentDetails?.duration || null,
+                        thumbnail: video.snippet.thumbnails?.default?.url || null
+                    }));
+                    songs.push(...items);
                 }
-                catch (error) {
-                    console.error('Error fetching playlist tracks:', error);
+                nextPageToken = response.data.nextPageToken;
+                if (!nextPageToken) {
+                    break;
                 }
             }
+            return songs;
         }
         catch (error) {
             console.error('Error fetching playlist tracks:', error);
+            throw new Error('Failed to fetch playlist tracks');
         }
-        return songs;
     }
 }
 exports.YouTubeMusicService = YouTubeMusicService;
